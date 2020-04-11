@@ -1,0 +1,7 @@
+md5: ba8fe79026184948e93e1f0ca111e4b0
+outs:
+- md5: cc34ea17dd001554ce42b8c10f8824b1
+  path: QuickGO-annotations-1586638417814-20200411.gpad
+  cache: true
+  metric: false
+  persist: false

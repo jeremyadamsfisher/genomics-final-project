@@ -1,0 +1,4 @@
+[core]
+    remote = gcp
+['remote "gcp"']
+    url = gs://genomics-final-data
