@@ -6,7 +6,10 @@ init:
 	poetry run nb-clean configure-git
 
 dataclean:
-	$(PY) pipeline/clean_data.py
+	dvc run \
+		-d data/raw/fly_shim_subset/QuickGO-annotations-1586973806005-20200415.tsv \
+		-o data/intermediary/drosophila_protein_ontology_and_seqs.csv \
+		poetry run python pipeline/clean_data.py
 
 train:
 	$(PY) pipeline/train.py

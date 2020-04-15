@@ -1,0 +1,11 @@
+md5: b7ad9c260d449ffe510231d5afed75a0
+cmd: poetry run python pipeline/clean_data.py
+deps:
+- md5: fdea31685941f29ae41bc3194f715043
+  path: data/raw/fly_shim_subset/QuickGO-annotations-1586973806005-20200415.tsv
+outs:
+- md5: 30e51ec8ff2c0f31b942b3d9f3369988
+  path: data/intermediary/drosophila_protein_ontology_and_seqs.csv
+  cache: true
+  metric: false
+  persist: false

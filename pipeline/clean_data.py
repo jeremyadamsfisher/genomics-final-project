@@ -9,15 +9,15 @@ from Bio import Entrez, SeqIO
 from tqdm import tqdm
 Entrez.email = "jeremyf@cmu.edu"
 
-ontology_fp = "data/raw/zebrafish_protein_ontology.tsv"
-ontology_with_seqs_fp = "data/intermediary/zebrafish_protein_ontology_and_seqs.tsv"
+ontology_fp = "data/raw/fly_shim_subset/QuickGO-annotations-1586973806005-20200415.tsv"
+ontology_with_seqs_fp = "data/intermediary/drosophila_protein_ontology_and_seqs.csv"
 
 df = pd.read_csv(ontology_fp, delimiter="\t")
 df.columns = df.columns.map(lambda s: s.replace(" ", "_").lower())
 df = df[["gene_product_id", "symbol", "qualifier", "go_name"]]
 gene2seq = {}
 genes = df["gene_product_id"].unique()
-for gene in tqdm(genes, unit="genes"):
+for gene in tqdm(genes, unit="gene"):
     try:
         with Entrez.efetch(db="protein", id=gene, rettype="fasta", retmax=1) as query:
             record = next(SeqIO.parse(query, "fasta"))
@@ -27,4 +27,4 @@ for gene in tqdm(genes, unit="genes"):
     finally:
         time.sleep(1)
 df["seq"] = df["gene_product_id"].map(gene2seq)
-df.dropna().to_csv(ontology_with_seqs_fp)
+df.dropna().to_csv(ontology_with_seqs_fp, index=False)
