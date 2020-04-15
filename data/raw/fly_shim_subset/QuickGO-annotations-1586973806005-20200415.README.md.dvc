@@ -1,0 +1,7 @@
+md5: e09e2f5820b192f92a24ebf74ab8dae9
+outs:
+- md5: 896fa9674e0fb18e82319bc542b238f0
+  path: QuickGO-annotations-1586973806005-20200415.README.md
+  cache: true
+  metric: false
+  persist: false

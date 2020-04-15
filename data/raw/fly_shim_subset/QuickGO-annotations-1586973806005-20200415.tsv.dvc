@@ -1,0 +1,7 @@
+md5: 0a57d08e2dc767b9226fd33276c21146
+outs:
+- md5: fdea31685941f29ae41bc3194f715043
+  path: QuickGO-annotations-1586973806005-20200415.tsv
+  cache: true
+  metric: false
+  persist: false
