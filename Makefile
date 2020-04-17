@@ -12,4 +12,4 @@ dataclean:
 		poetry run python pipeline/clean_data.py
 
 train:
-	$(PY) pipeline/train.py
+	poetry run python pipeline/train.py
