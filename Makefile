@@ -15,4 +15,8 @@ dataclean:
 		poetry run python pipeline/clean_data.py
 
 train:
-	poetry run python pipeline/train.py
+	dvc run \
+		-d poetry.lock \
+		-d ./data/intermediary/drosophila_full_protein_ontology_and_seqs.csv \
+		-M metrics.json \
+		poetry run python pipeline/train.py

@@ -13,11 +13,11 @@ from tqdm import tqdm, trange
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-ONTOLOGY_SEQ_DATASET_FP = "data/intermediary/drosophila_protein_ontology_and_seqs.csv"
+ONTOLOGY_SEQ_DATASET_FP = "data/intermediary/drosophila_full_protein_ontology_and_seqs.csv"
 
 # load sequence and ontology data into memory
 df_original = pd.read_csv(ONTOLOGY_SEQ_DATASET_FP)
-relevant_subset = df_original[df_original.qualifier.isin(["enables", "involved_in"])].dropna()
+relevant_subset = df_original[df_original.qualifier.isin(["enables", "involved_in"])].dropna().sample(frac=0.01)
 interesting_go_names = [
     name for (name, freq)
     in relevant_subset.go_name.value_counts().to_dict().items()
@@ -41,13 +41,14 @@ VOCAB_SIZE = len(vocab)
 EMBEDDING_DIM = 8
 HIDDEN_DIM = 16
 BATCH_SIZE = 1
+N_EPOCHS = 100
 
-print("-"*25)
+print("="*40)
 print(f"Dataset consists of:")
-print(f"\t{N_EXAMPLES} examples")
-print(f"\t{N_ONTOLOGICAL_CATEGORIES} ontological categories")
-print(f"\t{N_EXAMPLES*N_ONTOLOGICAL_CATEGORIES} total prediction tasks")
-print("-"*25)
+print(f"\t - {N_EXAMPLES} examples")
+print(f"\t - {N_ONTOLOGICAL_CATEGORIES} ontological categories")
+print(f"\t - {N_EXAMPLES*N_ONTOLOGICAL_CATEGORIES} total prediction tasks")
+print("="*40)
 
 # convert data into tensors
 class SeqOntologyDataset(torch.utils.data.Dataset):
@@ -98,7 +99,7 @@ optimizer = optim.Adam(clf.parameters())
 losses = {"train": [], "test": []}
 f1s = []
 accuracies = []
-N_EPOCHS = 100
+rocs_aucs = []
 for epoch in trange(N_EPOCHS, unit="epoch"):
     for phase in ["train", "test"]:
         clf.train() if phase == "train" else clf.eval()
@@ -121,11 +122,13 @@ for epoch in trange(N_EPOCHS, unit="epoch"):
             running_loss += loss.item() * BATCH_SIZE
         losses[phase].append(running_loss/len(dl[phase]))
         if phase == "test":
+            # TODO: should I be flattening out these categories before calculating metrics?
             accuracies.append(metrics.accuracy_score(ontology_valid_truth, ontology_valid_pred))
             f1s.append(metrics.fbeta_score(ontology_valid_truth, ontology_valid_pred, beta=1))
+            rocs_aucs.append(metrics.roc_auc_score(ontology_valid_truth, ontology_valid_pred))
 
 with plt.style.context("ggplot"):
-    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(15,5))
+    fig, (ax0, ax1, ax2, ax3) = plt.subplots(1, 4, figsize=(20,5))
     ax0.plot(range(N_EPOCHS), losses["train"], label="training")
     ax0.plot(range(N_EPOCHS), losses["test"], label="testing", c="black")
     ax0.set(xlabel="Epoch", ylabel="Loss (Binary Cross Entropy)")
@@ -133,11 +136,16 @@ with plt.style.context("ggplot"):
     ax1.set(xlabel="Epoch", ylabel="F1")
     ax2.plot(range(N_EPOCHS), accuracies, c="black")
     ax2.set(xlabel="Epoch", ylabel="Accuracy")
+    ax3.plot(range(N_EPOCHS), rocs_aucs, c="black")
+    ax3.set(xlabel="Epoch", ylabel="AUC-ROC")
     fig.legend()
     fig.suptitle("LSTM")
+    fig.savefig("DELETEME_performance.png")
+    plt.close()
 
 with open("metrics.json", "wt") as f:
     json.dump({
         "accuracy": accuracies[-1],
         "f1": f1s[-1],
+        "auc_roc": rocs_aucs[-1],
     }, f)
