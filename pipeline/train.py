@@ -17,7 +17,7 @@ ONTOLOGY_SEQ_DATASET_FP = "data/intermediary/drosophila_full_protein_ontology_an
 
 # load sequence and ontology data into memory
 df_original = pd.read_csv(ONTOLOGY_SEQ_DATASET_FP)
-relevant_subset = df_original[df_original.qualifier.isin(["enables", "involved_in"])].dropna().sample(frac=0.01)
+relevant_subset = df_original[df_original.qualifier.isin(["enables", "involved_in"])].dropna()
 interesting_go_names = [
     name for (name, freq)
     in relevant_subset.go_name.value_counts().to_dict().items()
