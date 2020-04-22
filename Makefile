@@ -19,4 +19,5 @@ train:
 		-d poetry.lock \
 		-d ./data/intermediary/drosophila_full_protein_ontology_and_seqs.csv \
 		-M metrics.json \
-		poetry run python pipeline/train.py
+		-f pipeline/train.dvc \
+		python pipeline/train.py

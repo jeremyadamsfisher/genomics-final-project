@@ -1,0 +1,14 @@
+md5: 8eb0c4ce92b4120508803c511c0669d3
+cmd: python pipeline/train.py
+wdir: ..
+deps:
+- md5: 3c0ffeba1162b5a1f82451fceee97848
+  path: poetry.lock
+- md5: 7bfb802ba62def3840b594c8d1279616
+  path: data/intermediary/drosophila_full_protein_ontology_and_seqs.csv
+outs:
+- md5: 5ef84cdf3f616cd6f4c6049da516f912
+  path: metrics.json
+  cache: false
+  metric: true
+  persist: false

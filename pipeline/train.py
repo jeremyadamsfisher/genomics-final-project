@@ -48,6 +48,7 @@ print(f"Dataset consists of:")
 print(f"\t - {N_EXAMPLES} examples")
 print(f"\t - {N_ONTOLOGICAL_CATEGORIES} ontological categories")
 print(f"\t - {N_EXAMPLES*N_ONTOLOGICAL_CATEGORIES} total prediction tasks")
+print(f"\t using {device}")
 print("="*40)
 
 # convert data into tensors
@@ -117,8 +118,8 @@ for epoch in trange(N_EPOCHS, unit="epoch"):
                     loss.backward()
                     optimizer.step()
                 if phase == "test":
-                    ontology_valid_truth.extend(ontology.squeeze())
-                    ontology_valid_pred.extend((ontology_likelihoods.squeeze()) > 0.5)
+                    ontology_valid_truth.extend(ontology.squeeze().cpu())
+                    ontology_valid_pred.extend((ontology_likelihoods.squeeze().cpu()) > 0.5)
             running_loss += loss.item() * BATCH_SIZE
         losses[phase].append(running_loss/len(dl[phase]))
         if phase == "test":
