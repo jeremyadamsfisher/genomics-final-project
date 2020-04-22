@@ -7,8 +7,11 @@ init:
 
 dataclean:
 	dvc run \
-		-d data/raw/fly_shim_subset/QuickGO-annotations-1586973806005-20200415.tsv \
-		-o data/intermediary/drosophila_protein_ontology_and_seqs.csv \
+		-d poetry.lock \
+		-d ./data/raw/fly_shim/QuickGO-annotations-1587408787815-20200420.tsv \
+		-d ./data/raw/fly_shim/uniprot-yourlist%3AM20200422A94466D2655679D1FD8953E075198DA86FF07ED.fasta \
+		-o ./data/intermediary/drosophila_full_protein_ontology_and_seqs.csv \
+		-f pipeline/clean_data.dvc \
 		poetry run python pipeline/clean_data.py
 
 train:

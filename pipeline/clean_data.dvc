@@ -1,0 +1,16 @@
+md5: a950077b090aa2ae078dcc38825e1ff5
+cmd: poetry run python pipeline/clean_data.py
+wdir: ..
+deps:
+- md5: 82d2da084e71f4033434a0fbc70610a1
+  path: poetry.lock
+- md5: 52b7e826abf24e5674b94be26e40ad3b
+  path: data/raw/fly_shim/QuickGO-annotations-1587408787815-20200420.tsv
+- md5: 85b0d1710b17537a794a399a29c18807
+  path: data/raw/fly_shim/uniprot-yourlist%3AM20200422A94466D2655679D1FD8953E075198DA86FF07ED.fasta
+outs:
+- md5: 7bfb802ba62def3840b594c8d1279616
+  path: data/intermediary/drosophila_full_protein_ontology_and_seqs.csv
+  cache: true
+  metric: false
+  persist: false
