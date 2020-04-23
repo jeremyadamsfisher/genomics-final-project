@@ -103,10 +103,10 @@ class OntologyLSTM(nn.Module):
         X, (self.h0, self.c0) = self.lstm(seq_embedded, (self.h0, self.c0))
         logits = self.fc(X[:,-1,:])  # grab the final hidden layer
         likelihood = torch.softmax(logits, -1).double()
-        return likelihood
+        return logits, likelihood
 
 clf = OntologyLSTM()
-criterion = torch.nn.BCELoss()
+criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(clf.parameters())
 
 losses = {"train": [], "test": []}
@@ -121,36 +121,29 @@ for epoch in trange(N_EPOCHS, unit="epoch"):
             _, seq_len = seq.shape
             clf.reset(seq_len)
             with torch.set_grad_enabled(phase == "train"):
-                likelihood = clf(seq)
-                loss = criterion(likelihood, ontology)
+                logits, likelihood = clf(seq)
+                loss = criterion(logits, ontology.argmax(axis=1))
                 if phase == "train":
                     loss.backward()
                     optimizer.step()
-            running_loss += loss.item() * BATCH_SIZE
-            running_correct += ((likelihood > 0.5).double() == ontology).min(axis=1).values.sum().item() # kinda hacky
+            running_loss += loss.item() / BATCH_SIZE
+            running_correct += (likelihood.argmax(axis=1) == ontology.argmax(axis=1)).sum().item() / BATCH_SIZE
         losses[phase].append(running_loss/len(dl[phase]))
         accuracies[phase].append(running_correct/len(dl[phase]))
-    if epoch % 1 == 0:
+    if epoch % 10 == 0:
         print(f"Epoch {epoch+1}:")
         for phase in ["train", "test"]:
             print(f"=> {phase} accuracy:  {accuracies[phase][-1]:.1%}")
             print(f"=> {phase} avg. loss: {losses[phase][-1]}")
 
 with plt.style.context("ggplot"):
-    fig, (ax0, ax1, ax2, ax3) = plt.subplots(1, 4, figsize=(20,5))
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10,5))
     ax0.plot(range(N_EPOCHS), losses["train"], label="training")
     ax0.plot(range(N_EPOCHS), losses["test"], label="testing", c="black")
     ax0.set(xlabel="Epoch", ylabel="Loss (Binary Cross Entropy)")
-    ax1.plot(range(N_EPOCHS), f1s, c="black")
-    ax1.set(xlabel="Epoch", ylabel="F1")
-    ax2.plot(range(N_EPOCHS), accuracies, c="black")
-    ax2.set(xlabel="Epoch", ylabel="Accuracy")
-    ax3.plot(range(N_EPOCHS), rocs_aucs, c="black")
-    ax3.set(xlabel="Epoch", ylabel="AUC-ROC")
-    fig.legend()
-    fig.suptitle("LSTM")
-    fig.savefig("DELETEME_performance.png")
-    plt.close()
+    ax1.plot(range(N_EPOCHS), accuracies["test"], c="black")
+    ax1.set(xlabel="Epoch", ylabel="Accuracy")
+    fig.savefig("DELETEME.png")
 
 with open("metrics.json", "wt") as f:
-    json.dump({"accuracy": accuracies[-1]}, f)
+    json.dump({"accuracy": accuracies["test"][-1]}, f)
