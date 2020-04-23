@@ -48,7 +48,7 @@ VOCAB_SIZE = len(vocab)
 EMBEDDING_DIM = 8
 HIDDEN_DIM = 16
 BATCH_SIZE = 8
-N_EPOCHS = 75
+N_EPOCHS = 500
 
 print("="*40)
 print(f"Dataset consists of:")
@@ -107,6 +107,7 @@ class OntologyLSTM(nn.Module):
 
 clf = OntologyLSTM()
 weight = (df[interesting_go_names].sum()/N_EXAMPLES).pow(-1)  # weight loss by inverse frequency
+weight = (weight / weight.mean()).apply(lambda x: max((1,x)))
 criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float().to(device))
 optimizer = optim.Adam(clf.parameters())
 
@@ -135,7 +136,7 @@ for epoch in trange(N_EPOCHS, unit="epoch"):
         print(f"Epoch {epoch+1}:")
         for phase in ["train", "test"]:
             print(f"=> {phase} accuracy:  {accuracies[phase][-1]:.1%}")
-            print(f"=> {phase} avg. loss: {losses[phase][-1]}")
+            print(f"=> {phase} avg. loss: {losses[phase][-1]:.2f}")
 
 with plt.style.context("ggplot"):
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10,5))
