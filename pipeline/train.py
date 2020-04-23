@@ -48,7 +48,7 @@ VOCAB_SIZE = len(vocab)
 EMBEDDING_DIM = 8
 HIDDEN_DIM = 16
 BATCH_SIZE = 8
-N_EPOCHS = 300
+N_EPOCHS = 75
 
 print("="*40)
 print(f"Dataset consists of:")
