@@ -52,9 +52,10 @@ N_EPOCHS = 300
 
 print("="*40)
 print(f"Dataset consists of:")
-print(f"\t - {N_EXAMPLES} examples")
-print(f"\t - {N_ONTOLOGICAL_CATEGORIES} ontological categories")
-print(f"\t - {N_EXAMPLES*N_ONTOLOGICAL_CATEGORIES} total prediction tasks")
+print(f"- {N_EXAMPLES} examples")
+print(f"- {N_ONTOLOGICAL_CATEGORIES} ontological categories")
+print(f"- {N_EXAMPLES*N_ONTOLOGICAL_CATEGORIES} total prediction tasks")
+print(f"- {df.sum(axis=1).sum()/(N_EXAMPLES*N_ONTOLOGICAL_CATEGORIES):.2f} positives")
 print(f"Using {device}")
 print("="*40)
 
@@ -100,45 +101,40 @@ class OntologyLSTM(nn.Module):
     def forward(self, seq):
         seq_embedded = self.seq_embedding(seq).view(len(seq), -1, EMBEDDING_DIM)
         X, (self.h0, self.c0) = self.lstm(seq_embedded, (self.h0, self.c0))
-        logits = self.fc(X[:,-1,:])
-        return logits
+        logits = self.fc(X[:,-1,:])  # grab the final hidden layer
+        likelihood = torch.softmax(logits, -1).double()
+        return likelihood
 
 clf = OntologyLSTM()
-criterion = torch.nn.BCEWithLogitsLoss()
+criterion = torch.nn.BCELoss()
 optimizer = optim.Adam(clf.parameters())
 
 losses = {"train": [], "test": []}
-f1s = []
-accuracies = []
-rocs_aucs = []
+accuracies = {"train": [], "test": []}
 for epoch in trange(N_EPOCHS, unit="epoch"):
     for phase in ["train", "test"]:
         clf.train() if phase == "train" else clf.eval()
         running_loss = 0
-        ontology_valid_truth = []
-        ontology_valid_pred = []
+        running_correct = 0
         for seq, ontology in dl[phase]:
             seq, ontology = seq.to(device), ontology.to(device)
             _, seq_len = seq.shape
             clf.reset(seq_len)
             with torch.set_grad_enabled(phase == "train"):
-                logits = clf(seq)
-                loss = criterion(logits, ontology)
+                likelihood = clf(seq)
+                loss = criterion(likelihood, ontology)
                 if phase == "train":
                     loss.backward()
                     optimizer.step()
-                if phase == "test":
-                    # breakpoint()
-                    ontology_valid_truth.extend(ontology.view(-1).tolist())
-                    likelihoods = torch.sigmoid(logits)
-                    ontology_valid_pred.extend((likelihoods.squeeze() > 0.5).view(-1).tolist())
             running_loss += loss.item() * BATCH_SIZE
+            running_correct += ((likelihood > 0.5).double() == ontology).min(axis=1).values.sum().item() # kinda hacky
         losses[phase].append(running_loss/len(dl[phase]))
-        if phase == "test":
-            # TODO: should I be flattening out these categories before calculating metrics?
-            accuracies.append(metrics.accuracy_score(ontology_valid_truth, ontology_valid_pred))
-            f1s.append(metrics.fbeta_score(ontology_valid_truth, ontology_valid_pred, beta=1))
-            rocs_aucs.append(metrics.roc_auc_score(ontology_valid_truth, ontology_valid_pred))
+        accuracies[phase].append(running_correct/len(dl[phase]))
+    if epoch % 1 == 0:
+        print(f"Epoch {epoch+1}:")
+        for phase in ["train", "test"]:
+            print(f"=> {phase} accuracy:  {accuracies[phase][-1]:.1%}")
+            print(f"=> {phase} avg. loss: {losses[phase][-1]}")
 
 with plt.style.context("ggplot"):
     fig, (ax0, ax1, ax2, ax3) = plt.subplots(1, 4, figsize=(20,5))
@@ -157,8 +153,4 @@ with plt.style.context("ggplot"):
     plt.close()
 
 with open("metrics.json", "wt") as f:
-    json.dump({
-        "accuracy": accuracies[-1],
-        "f1": f1s[-1],
-        "auc_roc": rocs_aucs[-1],
-    }, f)
+    json.dump({"accuracy": accuracies[-1]}, f)
