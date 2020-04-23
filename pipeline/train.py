@@ -48,7 +48,7 @@ print(f"Dataset consists of:")
 print(f"\t - {N_EXAMPLES} examples")
 print(f"\t - {N_ONTOLOGICAL_CATEGORIES} ontological categories")
 print(f"\t - {N_EXAMPLES*N_ONTOLOGICAL_CATEGORIES} total prediction tasks")
-print(f"\t using {device}")
+print(f"Using {device}")
 print("="*40)
 
 # convert data into tensors
