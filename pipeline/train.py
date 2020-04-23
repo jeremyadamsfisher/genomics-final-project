@@ -40,7 +40,7 @@ N_ONTOLOGICAL_CATEGORIES = len(interesting_go_names)
 VOCAB_SIZE = len(vocab)
 EMBEDDING_DIM = 8
 HIDDEN_DIM = 16
-BATCH_SIZE = 1
+BATCH_SIZE = 8
 N_EPOCHS = 100
 
 print("="*40)
@@ -67,7 +67,12 @@ ds_train, ds_test = torch.utils.data.random_split(
     SeqOntologyDataset(),
     lengths=[N_EXAMPLES-(N_EXAMPLES//4), N_EXAMPLES//4]
 )
-dl_args = {"batch_size": BATCH_SIZE, "shuffle": True}
+def collate(batch):
+    Xs, ys = zip(*batch)
+    X = pad_sequence(Xs, batch_first=True, padding_value=to_ix["<pad>"])
+    y = torch.cat(ys, 0)
+    return X, y
+dl_args = {"batch_size": BATCH_SIZE, "shuffle": True, "collate_fn": collate}
 dl = {"train": torch.utils.data.DataLoader(ds_train, **dl_args),
       "test": torch.utils.data.DataLoader(ds_test, **dl_args)}
 
@@ -78,20 +83,18 @@ class OntologyLSTM(nn.Module):
         self.seq_embedding = nn.Embedding(VOCAB_SIZE, EMBEDDING_DIM).to(device)
         self.lstm = nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM).to(device)
         self.fc = nn.Linear(HIDDEN_DIM, N_ONTOLOGICAL_CATEGORIES).to(device)
-        self.sigmoid = nn.Sigmoid().to(device)
         
     def reset(self, seq_len):
         """clear gradients from earlier examples"""
         self.zero_grad()
-        self.h0 = torch.zeros(1, seq_len, HIDDEN_DIM).to(device)
         self.c0 = torch.zeros(1, seq_len, HIDDEN_DIM).to(device)
+        self.h0 = torch.zeros(1, seq_len, HIDDEN_DIM).to(device)
         
     def forward(self, seq):
         seq_embedded = self.seq_embedding(seq).view(len(seq), -1, EMBEDDING_DIM)
-        _, (self.h0, self.c0) = self.lstm(seq_embedded, (self.h0, self.c0))
-        logits = self.fc(self.c0[:,-1,np.newaxis,:])
-        likelihoods = self.sigmoid(logits)
-        return logits, likelihoods
+        X, (self.h0, self.c0) = self.lstm(seq_embedded, (self.h0, self.c0))
+        logits = self.fc(X[:,-1,:])
+        return logits
 
 clf = OntologyLSTM()
 criterion = torch.nn.BCEWithLogitsLoss()
@@ -112,14 +115,16 @@ for epoch in trange(N_EPOCHS, unit="epoch"):
             _, seq_len = seq.shape
             clf.reset(seq_len)
             with torch.set_grad_enabled(phase == "train"):
-                ontology_logits, ontology_likelihoods = clf(seq)
-                loss = criterion(ontology_logits, ontology)
+                logits = clf(seq)
+                loss = criterion(logits, ontology)
                 if phase == "train":
                     loss.backward()
                     optimizer.step()
                 if phase == "test":
-                    ontology_valid_truth.extend(ontology.squeeze().cpu())
-                    ontology_valid_pred.extend((ontology_likelihoods.squeeze().cpu()) > 0.5)
+                    # breakpoint()
+                    ontology_valid_truth.extend(ontology.view(-1).tolist())
+                    likelihoods = torch.sigmoid(logits)
+                    ontology_valid_pred.extend((likelihoods.squeeze() > 0.5).view(-1).tolist())
             running_loss += loss.item() * BATCH_SIZE
         losses[phase].append(running_loss/len(dl[phase]))
         if phase == "test":
