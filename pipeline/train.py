@@ -106,7 +106,8 @@ class OntologyLSTM(nn.Module):
         return logits, likelihood
 
 clf = OntologyLSTM()
-criterion = nn.CrossEntropyLoss()
+weight = (df[interesting_go_names].sum()/N_EXAMPLES).pow(-1)  # weight loss by inverse frequency
+criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float())
 optimizer = optim.Adam(clf.parameters())
 
 losses = {"train": [], "test": []}
