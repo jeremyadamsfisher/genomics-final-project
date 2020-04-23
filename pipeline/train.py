@@ -21,13 +21,20 @@ relevant_subset = df_original[df_original.qualifier.isin(["enables", "involved_i
 interesting_go_names = [
     name for (name, freq)
     in relevant_subset.go_name.value_counts().to_dict().items()
-    if 250 < freq
-]  
+    if 500 < freq
+]
 relevant_subset = relevant_subset[relevant_subset.go_name.isin(interesting_go_names)]
 df = pd.DataFrame(index=relevant_subset.seq.unique(), columns=interesting_go_names).fillna(0)
 for _, row in relevant_subset.iterrows():
     df.loc[row.seq, row.go_name] = 1
 df = df.reset_index().rename(columns={"index": "seqs"})
+
+# include **only** genes with 1 annotation
+df = df[df.sum(axis=1) == 1]
+interesting_go_names = [
+    go for go in interesting_go_names if df[go].sum() > 0
+]
+df = df[["seqs"] + interesting_go_names]
 vocab = set()
 for seq in df.seqs:
     vocab.update(seq)
