@@ -46,9 +46,9 @@ N_EXAMPLES, _ = df.shape
 N_ONTOLOGICAL_CATEGORIES = len(interesting_go_names)
 VOCAB_SIZE = len(vocab)
 EMBEDDING_DIM = 8
-HIDDEN_DIM = 16
+HIDDEN_DIM = 64
 BATCH_SIZE = 8
-N_EPOCHS = 500
+N_EPOCHS = 200
 
 print("="*40)
 print(f"Dataset consists of:")
@@ -105,8 +105,9 @@ class OntologyLSTM(OntologyClassifier):
         self.lstm = nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM).to(device)
 
     def forward_(self, seq, seq_embedded):
-        hidden_initial = (torch.zeros(1, len(seq), HIDDEN_DIM).to(device), 
-                          torch.zeros(1, len(seq), HIDDEN_DIM).to(device))
+        _, seq_len = seq.shape
+        hidden_initial = (torch.zeros(1, seq_len, HIDDEN_DIM).to(device), 
+                          torch.zeros(1, seq_len, HIDDEN_DIM).to(device))
         X, _ = self.lstm(seq_embedded, hidden_initial)
         return X[:,-1,:]
 
@@ -121,47 +122,54 @@ class OntologyRNN(OntologyClassifier):
         return X[:,-1,:]
 
 
-clf = OntologyRNN()
 weight = (df[interesting_go_names].sum()/N_EXAMPLES).pow(-1)  # weight loss by inverse frequency
-weight = (weight / weight.mean()).apply(lambda x: max((1,x)))
+weight = (weight / weight.mean()).apply(lambda x: max((1,x)))  # make this less extreme
 criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float().to(device))
-optimizer = optim.Adam(clf.parameters())
 
-losses = {"train": [], "test": []}
-accuracies = {"train": [], "test": []}
-for epoch in trange(N_EPOCHS, unit="epoch"):
-    for phase in ["train", "test"]:
-        clf.train() if phase == "train" else clf.eval()
-        running_loss = 0
-        running_correct = 0
-        for seq, ontology in dl[phase]:
-            seq, ontology = seq.to(device), ontology.to(device)
-            _, seq_len = seq.shape
-            clf.zero_grad()
-            with torch.set_grad_enabled(phase == "train"):
-                logits, likelihood = clf(seq)
-                loss = criterion(logits, ontology.argmax(axis=1))
-                if phase == "train":
-                    loss.backward()
-                    optimizer.step()
-            running_loss += loss.item() / BATCH_SIZE
-            running_correct += (likelihood.argmax(axis=1) == ontology.argmax(axis=1)).sum().item() / BATCH_SIZE
-        losses[phase].append(running_loss/len(dl[phase]))
-        accuracies[phase].append(running_correct/len(dl[phase]))
-    if epoch % 10 == 0:
-        print(f"Epoch {epoch+1}:")
+metrics = {}
+for model, model_name in [
+    (OntologyRNN(), "RNN"),
+    (OntologyLSTM(), "LSTM")
+    ]:
+    optimizer = optim.Adam(model.parameters())
+    losses = {"train": [], "test": []}
+    accuracies = {"train": [], "test": []}
+    for epoch in trange(N_EPOCHS, unit="epoch"):
         for phase in ["train", "test"]:
-            print(f"=> {phase} accuracy:  {accuracies[phase][-1]:.1%}")
-            print(f"=> {phase} avg. loss: {losses[phase][-1]:.2f}")
+            model.train() if phase == "train" else model.eval()
+            running_loss = 0
+            running_correct = 0
+            for seq, ontology in dl[phase]:
+                seq, ontology = seq.to(device), ontology.to(device)
+                _, seq_len = seq.shape
+                model.zero_grad()
+                with torch.set_grad_enabled(phase == "train"):
+                    logits, likelihood = model(seq)
+                    loss = criterion(logits, ontology.argmax(axis=1))
+                    if phase == "train":
+                        loss.backward()
+                        optimizer.step()
+                running_loss += loss.item() / BATCH_SIZE
+                running_correct += (likelihood.argmax(axis=1) == ontology.argmax(axis=1)).sum().item() / BATCH_SIZE
+            losses[phase].append(running_loss/len(dl[phase]))
+            accuracies[phase].append(running_correct/len(dl[phase]))
+        if epoch % 10 == 0:
+            print(f"{model_name} @ epoch {epoch+1}:")
+            for phase in ["train", "test"]:
+                print(f"=> {phase} accuracy:  {accuracies[phase][-1]:.1%}")
+                print(f"=> {phase} avg. loss: {losses[phase][-1]:.2f}")
 
-with plt.style.context("ggplot"):
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10,5))
-    ax0.plot(range(N_EPOCHS), losses["train"], label="training")
-    ax0.plot(range(N_EPOCHS), losses["test"], label="testing", c="black")
-    ax0.set(xlabel="Epoch", ylabel="Loss (Binary Cross Entropy)")
-    ax1.plot(range(N_EPOCHS), accuracies["test"], c="black")
-    ax1.set(xlabel="Epoch", ylabel="Accuracy")
-    fig.savefig("DELETEME.png")
+    with plt.style.context("ggplot"):
+        fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10,5))
+        ax0.plot(range(N_EPOCHS), losses["train"], label="training")
+        ax0.plot(range(N_EPOCHS), losses["test"], label="testing", c="black")
+        ax0.set(xlabel="Epoch", ylabel="Loss (Binary Cross Entropy)")
+        ax1.plot(range(N_EPOCHS), accuracies["test"], c="black")
+        ax1.set(xlabel="Epoch", ylabel="Accuracy")
+        fig.suptitle(model_name)
+        fig.savefig(f"DELETEME-{model_name}.png")
+
+    metrics[f"{model_name}-accuracy"] = accuracies["test"][-1]
 
 with open("metrics.json", "wt") as f:
-    json.dump({"accuracy": accuracies["test"][-1]}, f)
+    json.dump(metrics, f)
