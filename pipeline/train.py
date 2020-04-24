@@ -1,5 +1,6 @@
 import random
 import json
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,7 +14,16 @@ from tqdm import tqdm, trange
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-ONTOLOGY_SEQ_DATASET_FP = "data/intermediary/drosophila_full_protein_ontology_and_seqs.csv"
+# inputs
+ONTOLOGY_SEQ_DATASET_FP = Path("data/intermediary/drosophila_full_protein_ontology_and_seqs.csv")
+
+# outputs
+MODEL_ARTIFACTS_DIR = Path("data/model_artifacts")
+FILTERED_DATASET_FP = MODEL_ARTIFACTS_DIR/"drosophila_subset.csv.gz"
+RUNNING_METRICS_FP = MODEL_ARTIFACTS_DIR/"running_metrics.json"
+LSTM_WEIGHTS_FP = MODEL_ARTIFACTS_DIR/"lstm.pth"
+RNN_WEIGHTS_FP = MODEL_ARTIFACTS_DIR/"rnn.pth"
+LSTM_ATTN_WEIGHTS_FP = MODEL_ARTIFACTS_DIR/"lstm_attn.pth"
 
 # load sequence and ontology data into memory
 df_original = pd.read_csv(ONTOLOGY_SEQ_DATASET_FP)
@@ -35,6 +45,8 @@ interesting_go_names = [
     go for go in interesting_go_names if df[go].sum() > 0
 ]
 df = df[["seqs"] + interesting_go_names]
+df.to_csv(FILTERED_DATASET_FP)
+
 vocab = set()
 for seq in df.seqs:
     vocab.update(seq)
@@ -148,10 +160,10 @@ weight = (weight / weight.mean()).apply(lambda x: max((1,x)))  # make this less 
 criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float().to(device))
 
 metrics = {}
-for model, model_name in [
-    (OntologyAttnLSTM(), "Attention + LSTM"),
-    (OntologyRNN(), "RNN"),
-    (OntologyLSTM(), "LSTM"),
+for model, model_name, model_out_fp in [
+    (OntologyAttnLSTM(), "AttentionLSTM", LSTM_ATTN_WEIGHTS_FP),
+    (OntologyRNN(),      "RNN",           RNN_WEIGHTS_FP),
+    (OntologyLSTM(),     "LSTM",          LSTM_WEIGHTS_FP),
     ]:
     optimizer = optim.Adam(model.parameters())
     losses = {"train": [], "test": []}
@@ -175,23 +187,13 @@ for model, model_name in [
                 running_correct += (likelihood.argmax(axis=1) == ontology.argmax(axis=1)).sum().item() / BATCH_SIZE
             losses[phase].append(running_loss/len(dl[phase]))
             accuracies[phase].append(running_correct/len(dl[phase]))
-        if epoch % 10 == 0:
+        if epoch % 50 == 0:
             print(f"{model_name} @ epoch {epoch+1}:")
             for phase in ["train", "test"]:
                 print(f"=> {phase} accuracy:  {accuracies[phase][-1]:.1%}")
                 print(f"=> {phase} avg. loss: {losses[phase][-1]:.2f}")
+    metrics[model_name] = {"losses": losses, "accuracies": accuracies}
+    torch.save(model, model_out_fp)
 
-    with plt.style.context("ggplot"):
-        fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10,5))
-        ax0.plot(range(N_EPOCHS), losses["train"], label="training")
-        ax0.plot(range(N_EPOCHS), losses["test"], label="testing", c="black")
-        ax0.set(xlabel="Epoch", ylabel="Loss (Binary Cross Entropy)")
-        ax1.plot(range(N_EPOCHS), accuracies["test"], c="black")
-        ax1.set(xlabel="Epoch", ylabel="Accuracy")
-        fig.suptitle(model_name)
-        fig.savefig(f"DELETEME-{model_name}.png")
-
-    metrics[f"{model_name}-accuracy"] = accuracies["test"][-1]
-
-with open("metrics.json", "wt") as f:
+with RUNNING_METRICS_FP.open("wt") as f:
     json.dump(metrics, f)
