@@ -104,12 +104,34 @@ class OntologyLSTM(OntologyClassifier):
         super().__init__()
         self.lstm = nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM).to(device)
 
+    def init_hidden(self, seq_len):
+        return (torch.zeros(1, seq_len, HIDDEN_DIM).to(device), 
+                torch.zeros(1, seq_len, HIDDEN_DIM).to(device))
+
     def forward_(self, seq, seq_embedded):
         _, seq_len = seq.shape
-        hidden_initial = (torch.zeros(1, seq_len, HIDDEN_DIM).to(device), 
-                          torch.zeros(1, seq_len, HIDDEN_DIM).to(device))
-        X, _ = self.lstm(seq_embedded, hidden_initial)
+        X, _ = self.lstm(seq_embedded, self.init_hidden(seq_len))
         return X[:,-1,:]
+
+class OntologyAttnLSTM(OntologyLSTM):
+    """https://github.com/prakashpandey9/Text-Classification-Pytorch/blob/master/models/selfAttention.py"""
+    def __init__(self):
+        super().__init__()
+        self.w1 = nn.Linear(HIDDEN_DIM, 350)
+        self.w2 = nn.Linear(350, 30)
+        self.fc = nn.Linear(30*HIDDEN_DIM, N_ONTOLOGICAL_CATEGORIES)
+    
+    def forward_(self, seq, seq_embedded):
+        _, seq_len = seq.shape
+        X, _ = self.lstm(seq_embedded, self.init_hidden(seq_len))
+        attention = self.w1(X)
+        attention = torch.tanh(attention)
+        attention = self.w2(attention)
+        attention = attention.permute(0, 2, 1)
+        attention = torch.softmax(attention, dim=2)
+        hidden = torch.bmm(attention, X)
+        assert hidden.size() == (BATCH_SIZE, 30, HIDDEN_DIM), hidden.size()
+        return hidden.view(-1, 30*HIDDEN_DIM)
 
 
 class OntologyRNN(OntologyClassifier):
@@ -129,7 +151,8 @@ criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float().to(device))
 metrics = {}
 for model, model_name in [
     (OntologyRNN(), "RNN"),
-    (OntologyLSTM(), "LSTM")
+    (OntologyLSTM(), "LSTM"),
+    (OntologyAttnLSTM(), "Attention + LSTM")
     ]:
     optimizer = optim.Adam(model.parameters())
     losses = {"train": [], "test": []}
