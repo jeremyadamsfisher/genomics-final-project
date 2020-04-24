@@ -17,6 +17,7 @@ dataclean:
 train:
 	dvc run \
 		-d conda.yaml \
+		-d pipeline/train.py \
 		-d ./data/intermediary/drosophila_full_protein_ontology_and_seqs.csv \
 		-M metrics.json \
 		-f pipeline/train.dvc \

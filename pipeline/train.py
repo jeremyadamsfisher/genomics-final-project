@@ -85,27 +85,43 @@ dl = {"train": torch.utils.data.DataLoader(ds_train, **dl_args),
       "test": torch.utils.data.DataLoader(ds_test, **dl_args)}
 
 # define model(s)
-class OntologyLSTM(nn.Module):
+class OntologyClassifier(nn.Module):
     def __init__(self):
-        super(OntologyLSTM, self).__init__()
+        super().__init__()
         self.seq_embedding = nn.Embedding(VOCAB_SIZE, EMBEDDING_DIM).to(device)
-        self.lstm = nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM).to(device)
         self.fc = nn.Linear(HIDDEN_DIM, N_ONTOLOGICAL_CATEGORIES).to(device)
-        
-    def reset(self, seq_len):
-        """clear gradients from earlier examples"""
-        self.zero_grad()
-        self.c0 = torch.zeros(1, seq_len, HIDDEN_DIM).to(device)
-        self.h0 = torch.zeros(1, seq_len, HIDDEN_DIM).to(device)
         
     def forward(self, seq):
         seq_embedded = self.seq_embedding(seq).view(len(seq), -1, EMBEDDING_DIM)
-        X, (self.h0, self.c0) = self.lstm(seq_embedded, (self.h0, self.c0))
-        logits = self.fc(X[:,-1,:])  # grab the final hidden layer
+        hidden = self.forward_(seq, seq_embedded)
+        logits = self.fc(hidden)
         likelihood = torch.softmax(logits, -1).double()
         return logits, likelihood
 
-clf = OntologyLSTM()
+
+class OntologyLSTM(OntologyClassifier):
+    def __init__(self):
+        super().__init__()
+        self.lstm = nn.LSTM(EMBEDDING_DIM, HIDDEN_DIM).to(device)
+
+    def forward_(self, seq, seq_embedded):
+        hidden_initial = (torch.zeros(1, len(seq), HIDDEN_DIM).to(device), 
+                          torch.zeros(1, len(seq), HIDDEN_DIM).to(device))
+        X, _ = self.lstm(seq_embedded, hidden_initial)
+        return X[:,-1,:]
+
+
+class OntologyRNN(OntologyClassifier):
+    def __init__(self):
+        super().__init__()
+        self.rnn = nn.RNN(EMBEDDING_DIM, HIDDEN_DIM).to(device)
+    
+    def forward_(self, _, seq_embedded):
+        X, _ = self.rnn(seq_embedded)
+        return X[:,-1,:]
+
+
+clf = OntologyRNN()
 weight = (df[interesting_go_names].sum()/N_EXAMPLES).pow(-1)  # weight loss by inverse frequency
 weight = (weight / weight.mean()).apply(lambda x: max((1,x)))
 criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float().to(device))
@@ -121,7 +137,7 @@ for epoch in trange(N_EPOCHS, unit="epoch"):
         for seq, ontology in dl[phase]:
             seq, ontology = seq.to(device), ontology.to(device)
             _, seq_len = seq.shape
-            clf.reset(seq_len)
+            clf.zero_grad()
             with torch.set_grad_enabled(phase == "train"):
                 logits, likelihood = clf(seq)
                 loss = criterion(logits, ontology.argmax(axis=1))

@@ -1,13 +1,15 @@
-md5: 0d0ecca982704815b0bcc723405bb3f6
+md5: d1f55c9a02e7e189483fc2a8736bd439
 cmd: python pipeline/train.py
 wdir: ..
 deps:
 - md5: 5f9c47482b628d54f0ac2b63be9f4bb8
   path: conda.yaml
+- md5: ed00d12bb66e27258fd1ab3b4d2b450e
+  path: pipeline/train.py
 - md5: 7bfb802ba62def3840b594c8d1279616
   path: data/intermediary/drosophila_full_protein_ontology_and_seqs.csv
 outs:
-- md5: f3634c2be220757c328a05b0e00c1030
+- md5: f940d37b90885826b985d82a970bb279
   path: metrics.json
   cache: false
   metric: true
