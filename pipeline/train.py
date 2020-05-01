@@ -1,6 +1,6 @@
 import random
 import json
-from collections import defaultdict as ddict
+from collections import defaultdict
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -12,6 +12,12 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 from tqdm import tqdm, trange
+
+torch.manual_seed(42)
+np.random.seed(0)
+random.seed(42)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -155,20 +161,16 @@ class OntologyRNN(OntologyClassifier):
         X, _ = self.rnn(seq_embedded)
         return X[:,-1,:]
 
-
-weight = (df[interesting_go_names].sum()/N_EXAMPLES).pow(-1)  # weight loss by inverse frequency
-weight = (weight / weight.mean()).apply(lambda x: max((1,x)))  # make this less extreme
-criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float().to(device))
-
 attnlstm = OntologyAttnLSTM()
 
-metrics = ddict(lambda: {"train": [], "test": []})
+metrics = defaultdict(lambda: {"train": [], "test": []})
 for model, model_name, model_out_fp in [
     (attnlstm,       "AttentionLSTM", LSTM_ATTN_WEIGHTS_FP),
     (OntologyRNN(),  "RNN",           RNN_WEIGHTS_FP),
     (OntologyLSTM(), "LSTM",          LSTM_WEIGHTS_FP),
     ]:
     optimizer = optim.Adam(model.parameters())
+    criterion = nn.CrossEntropyLoss()
     for epoch in trange(N_EPOCHS, unit="epoch"):
         for phase in ["train", "test"]:
             model.train() if phase == "train" else model.eval()
@@ -195,11 +197,13 @@ for model, model_name, model_out_fp in [
             print(f"{model_name} @ epoch {epoch+1}:")
             for phase in ["train", "test"]:
                 print(f"=> {phase} avg. loss: {metrics['losses'][phase][-1]:.2f}")
-    torch.save(model, model_out_fp)
 
 
 with RUNNING_METRICS_FP.open("wt") as f:
-    json.dump(metrics, f)
+    json.dump({
+        "metrics": metrics,
+        "idx2bio_process": dict(enumerate(interesting_go_names)),
+    }, f)
 
 
 # confusion matrix
