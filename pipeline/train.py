@@ -67,7 +67,7 @@ VOCAB_SIZE = len(vocab)
 EMBEDDING_DIM = 8
 HIDDEN_DIM = 64
 BATCH_SIZE = 8
-N_EPOCHS = 200
+N_EPOCHS = 1
 
 print("="*40)
 print(f"Dataset consists of:")
@@ -204,18 +204,6 @@ with RUNNING_METRICS_FP.open("wt") as f:
         "metrics": metrics,
         "idx2bio_process": dict(enumerate(interesting_go_names)),
     }, f)
-
-
-# confusion matrix
-with torch.no_grad():
-    attnlstm.eval()
-    for seq, ontology in dl[phase]:
-        seq, ontology = seq.to(device), ontology.to(device)
-        model.zero_grad()
-        _, likelihood = attnlstm(seq)
-        y_true = ontology.argmax(axis=1)
-        y_pred = likelihood.argmax(axis=1)
-        running_correct += (likelihood.argmax(axis=1) == ontology.argmax(axis=1)).sum().item() / BATCH_SIZE
 
 
 
