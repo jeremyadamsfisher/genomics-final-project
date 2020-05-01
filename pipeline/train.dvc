@@ -1,0 +1,21 @@
+md5: f1e863e9bf542a22a5cca885534ce0ab
+cmd: python pipeline/train.py
+wdir: ..
+deps:
+- md5: 080e9c61289c3dcfa56faf443cbab087
+  path: pipeline/train.py
+- md5: 5f9c47482b628d54f0ac2b63be9f4bb8
+  path: conda.yaml
+- md5: 7bfb802ba62def3840b594c8d1279616
+  path: data/intermediary/drosophila_full_protein_ontology_and_seqs.csv
+outs:
+- md5: e20f1aac660734d514094b1ae541d0f4
+  path: data/model_artifacts/drosophila_subset.csv.gz
+  cache: true
+  metric: false
+  persist: false
+- md5: 13b77cff3108197db407a02a83adee49
+  path: data/model_artifacts/running_metrics.json
+  cache: true
+  metric: false
+  persist: false
