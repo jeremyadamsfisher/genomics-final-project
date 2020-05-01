@@ -16,13 +16,10 @@ dataclean:
 
 train:
 	dvc run \
+		-d pipeline/train.py \
 		-d conda.yaml \
 		-d ./data/intermediary/drosophila_full_protein_ontology_and_seqs.csv \
 		-o data/model_artifacts/drosophila_subset.csv.gz \
 		-o data/model_artifacts/running_metrics.json \
-		-o data/model_artifacts/lstm.pth \
-		-o data/model_artifacts/rnn.pth \
-		-o data/model_artifacts/lstm_attn.pth \
 		-f pipeline/train.dvc \
-		-d pipeline/train.py \
 		python pipeline/train.py

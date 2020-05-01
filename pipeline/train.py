@@ -67,7 +67,7 @@ VOCAB_SIZE = len(vocab)
 EMBEDDING_DIM = 8
 HIDDEN_DIM = 64
 BATCH_SIZE = 8
-N_EPOCHS = 1
+N_EPOCHS = 500
 
 print("="*40)
 print(f"Dataset consists of:")
@@ -163,7 +163,7 @@ class OntologyRNN(OntologyClassifier):
 
 attnlstm = OntologyAttnLSTM()
 
-metrics = defaultdict(lambda: {"train": [], "test": []})
+metrics = defaultdict(lambda: defaultdict(lambda: {"train": [], "test": []}))
 for model, model_name, model_out_fp in [
     (attnlstm,       "AttentionLSTM", LSTM_ATTN_WEIGHTS_FP),
     (OntologyRNN(),  "RNN",           RNN_WEIGHTS_FP),
@@ -189,20 +189,20 @@ for model, model_name, model_out_fp in [
                 running_loss += loss.item() / BATCH_SIZE
                 y_true.extend(ontology.argmax(axis=1).tolist())
                 y_pred.extend(likelihood.argmax(axis=1).tolist())
-            metrics["losses"][phase].append(running_loss/len(dl[phase]))
-            metrics["f1s"][phase].append(skmetrics.f1_score(y_true, y_pred, average="macro"))
-            metrics["accuracies"][phase].append(skmetrics.accuracy_score(y_true, y_pred))
-            metrics["confusion"][phase] = skmetrics.confusion_matrix(y_true, y_pred).tolist()
+            metrics[model_name]["losses"][phase].append(running_loss/len(dl[phase]))
+            metrics[model_name]["f1s"][phase].append(skmetrics.f1_score(y_true, y_pred, average="macro"))
+            metrics[model_name]["accuracies"][phase].append(skmetrics.accuracy_score(y_true, y_pred))
+            metrics[model_name]["confusion"][phase] = skmetrics.confusion_matrix(y_true, y_pred).tolist()
         if epoch % 50 == 0:
             print(f"{model_name} @ epoch {epoch+1}:")
             for phase in ["train", "test"]:
-                print(f"=> {phase} avg. loss: {metrics['losses'][phase][-1]:.2f}")
+                print(f"=> {phase} avg. loss: {metrics[model_name]['losses'][phase][-1]:.2f}")
 
 
 with RUNNING_METRICS_FP.open("wt") as f:
     json.dump({
-        "metrics": metrics,
         "idx2bio_process": dict(enumerate(interesting_go_names)),
+        "metrics": metrics,
     }, f)
 
 
