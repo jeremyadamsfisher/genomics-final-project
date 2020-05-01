@@ -1,10 +1,11 @@
 import random
 import json
+from collections import defaultdict as ddict
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import sklearn.metrics as metrics
+import sklearn.metrics as skmetrics
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -159,23 +160,23 @@ weight = (df[interesting_go_names].sum()/N_EXAMPLES).pow(-1)  # weight loss by i
 weight = (weight / weight.mean()).apply(lambda x: max((1,x)))  # make this less extreme
 criterion = nn.CrossEntropyLoss(weight=torch.tensor(weight).float().to(device))
 
-metrics = {}
+attnlstm = OntologyAttnLSTM()
+
+metrics = ddict(lambda: {"train": [], "test": []})
 for model, model_name, model_out_fp in [
-    (OntologyAttnLSTM(), "AttentionLSTM", LSTM_ATTN_WEIGHTS_FP),
-    (OntologyRNN(),      "RNN",           RNN_WEIGHTS_FP),
-    (OntologyLSTM(),     "LSTM",          LSTM_WEIGHTS_FP),
+    (attnlstm,       "AttentionLSTM", LSTM_ATTN_WEIGHTS_FP),
+    (OntologyRNN(),  "RNN",           RNN_WEIGHTS_FP),
+    (OntologyLSTM(), "LSTM",          LSTM_WEIGHTS_FP),
     ]:
     optimizer = optim.Adam(model.parameters())
-    losses = {"train": [], "test": []}
-    accuracies = {"train": [], "test": []}
     for epoch in trange(N_EPOCHS, unit="epoch"):
         for phase in ["train", "test"]:
             model.train() if phase == "train" else model.eval()
             running_loss = 0
-            running_correct = 0
+            y_true = []
+            y_pred = []
             for seq, ontology in dl[phase]:
                 seq, ontology = seq.to(device), ontology.to(device)
-                _, seq_len = seq.shape
                 model.zero_grad()
                 with torch.set_grad_enabled(phase == "train"):
                     logits, likelihood = model(seq)
@@ -184,16 +185,34 @@ for model, model_name, model_out_fp in [
                         loss.backward()
                         optimizer.step()
                 running_loss += loss.item() / BATCH_SIZE
-                running_correct += (likelihood.argmax(axis=1) == ontology.argmax(axis=1)).sum().item() / BATCH_SIZE
-            losses[phase].append(running_loss/len(dl[phase]))
-            accuracies[phase].append(running_correct/len(dl[phase]))
+                y_true.extend(ontology.argmax(axis=1).tolist())
+                y_pred.extend(likelihood.argmax(axis=1).tolist())
+            metrics["losses"][phase].append(running_loss/len(dl[phase]))
+            metrics["f1s"][phase].append(skmetrics.f1_score(y_true, y_pred, average="macro"))
+            metrics["accuracies"][phase].append(skmetrics.accuracy_score(y_true, y_pred))
+            metrics["confusion"][phase] = skmetrics.confusion_matrix(y_true, y_pred).tolist()
         if epoch % 50 == 0:
             print(f"{model_name} @ epoch {epoch+1}:")
             for phase in ["train", "test"]:
-                print(f"=> {phase} accuracy:  {accuracies[phase][-1]:.1%}")
-                print(f"=> {phase} avg. loss: {losses[phase][-1]:.2f}")
-    metrics[model_name] = {"losses": losses, "accuracies": accuracies}
+                print(f"=> {phase} avg. loss: {metrics['losses'][phase][-1]:.2f}")
     torch.save(model, model_out_fp)
+
 
 with RUNNING_METRICS_FP.open("wt") as f:
     json.dump(metrics, f)
+
+
+# confusion matrix
+with torch.no_grad():
+    attnlstm.eval()
+    for seq, ontology in dl[phase]:
+        seq, ontology = seq.to(device), ontology.to(device)
+        model.zero_grad()
+        _, likelihood = attnlstm(seq)
+        y_true = ontology.argmax(axis=1)
+        y_pred = likelihood.argmax(axis=1)
+        running_correct += (likelihood.argmax(axis=1) == ontology.argmax(axis=1)).sum().item() / BATCH_SIZE
+
+
+
+
