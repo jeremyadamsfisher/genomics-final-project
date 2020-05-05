@@ -31,6 +31,7 @@ RUNNING_METRICS_FP = MODEL_ARTIFACTS_DIR/"running_metrics.json"
 LSTM_WEIGHTS_FP = MODEL_ARTIFACTS_DIR/"lstm.pth"
 RNN_WEIGHTS_FP = MODEL_ARTIFACTS_DIR/"rnn.pth"
 LSTM_ATTN_WEIGHTS_FP = MODEL_ARTIFACTS_DIR/"lstm_attn.pth"
+RNN_ATTN_WEIGHTS_FP = MODEL_ARTIFACTS_DIR/"rnn_attn.pth"
 
 # load sequence and ontology data into memory
 df_original = pd.read_csv(ONTOLOGY_SEQ_DATASET_FP)
@@ -161,16 +162,40 @@ class OntologyRNN(OntologyClassifier):
         X, _ = self.rnn(seq_embedded)
         return X[:,-1,:]
 
-attnlstm = OntologyAttnLSTM()
+
+class OntologyAttnRNN(OntologyRNN):
+    def __init__(self):
+        super().__init__()
+        self.w1 = nn.Linear(HIDDEN_DIM, 350).to(device)
+        self.w2 = nn.Linear(350, 30).to(device)
+        self.fc = nn.Linear(30*HIDDEN_DIM, N_ONTOLOGICAL_CATEGORIES).to(device)
+    
+    def forward_(self, seq, seq_embedded):
+        _, seq_len = seq.shape
+        X, _ = self.rnn(seq_embedded)
+        attention = self.w1(X.to(device))
+        attention = torch.tanh(attention)
+        attention = self.w2(attention)
+        attention = attention.permute(0, 2, 1)
+        attention = torch.softmax(attention, dim=2)
+        hidden = torch.bmm(attention, X)
+        return hidden.view(-1, 30*HIDDEN_DIM)
+
+# sample importance = inverse frequency rescaled between 1 and 4
+weight = N_EXAMPLES / df[interesting_go_names].sum().values
+weight = weight - weight.min()
+weight = weight / weight.max()
+weight = (weight * 3) + 1
 
 metrics = defaultdict(lambda: defaultdict(lambda: {"train": [], "test": []}))
 for model, model_name, model_out_fp in [
-    (attnlstm,       "AttentionLSTM", LSTM_ATTN_WEIGHTS_FP),
-    (OntologyRNN(),  "RNN",           RNN_WEIGHTS_FP),
-    (OntologyLSTM(), "LSTM",          LSTM_WEIGHTS_FP),
+    (OntologyAttnLSTM(), "AttentionLSTM", LSTM_ATTN_WEIGHTS_FP),
+    (OntologyAttnRNN(),  "AttentionRNN",  RNN_ATTN_WEIGHTS_FP),
+    (OntologyRNN(),      "RNN",           RNN_WEIGHTS_FP),
+    (OntologyLSTM(),     "LSTM",          LSTM_WEIGHTS_FP),
     ]:
     optimizer = optim.Adam(model.parameters())
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor(weight).to(device))
     for epoch in trange(N_EPOCHS, unit="epoch"):
         for phase in ["train", "test"]:
             model.train() if phase == "train" else model.eval()
@@ -190,7 +215,7 @@ for model, model_name, model_out_fp in [
                 y_true.extend(ontology.argmax(axis=1).tolist())
                 y_pred.extend(likelihood.argmax(axis=1).tolist())
             metrics[model_name]["losses"][phase].append(running_loss/len(dl[phase]))
-            metrics[model_name]["f1s"][phase].append(skmetrics.f1_score(y_true, y_pred, average="macro"))
+            metrics[model_name]["f1s"][phase].append(skmetrics.f1_score(y_true, y_pred, average="weighted"))
             metrics[model_name]["accuracies"][phase].append(skmetrics.accuracy_score(y_true, y_pred))
             metrics[model_name]["confusion"][phase] = skmetrics.confusion_matrix(y_true, y_pred).tolist()
         if epoch % 50 == 0:
